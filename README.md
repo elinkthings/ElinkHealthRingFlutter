@@ -120,7 +120,7 @@ Elink Health Ring Flutter library.
   final data = elinkHealthRingCmdUtils.syncBleTime(syncTime!);
   _sendA6Data(data);
 ```
-- <font color="#FF0000">The syncTime parameter of elinkHealthRingCmdUtils.syncUnixTime(syncTime) and elinkHealthRingCmdUtils.syncBleTime(syncTime) must use the same value</font>
+- <span style="color:red">**⚠️ WARNING:** The syncTime parameter of elinkHealthRingCmdUtils.syncUnixTime(syncTime) and elinkHealthRingCmdUtils.syncBleTime(syncTime) must use the same value</span>
 
 #### Physical examination and automatic monitoring instructions
 ```dart
@@ -256,7 +256,7 @@ Elink Health Ring Flutter library.
   final data = _jfotaUtils.endOTA();
   _sendA7Data(data);
 ```
-- <font color="#FF0000">Do not perform terminal operations during the sensor OTA process, as this may cause the device to become unusable</font>
+- <span style="color:red">**⚠️ WARNING:** Do not interrupt the operation during the sensor OTA process, as it may cause the device to become unusable.</span>
 
 ### Health Ring Reporting Instructions
 #### General command callback

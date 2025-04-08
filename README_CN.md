@@ -120,7 +120,7 @@ Elink健康戒指Flutter库.
   final data = elinkHealthRingCmdUtils.syncBleTime(syncTime!);
   _sendA6Data(data);
 ```
--  <font color="#FF0000">elinkHealthRingCmdUtils.syncUnixTime(syncTime)elinkHealthRingCmdUtils.syncBleTime(syncTime)的入参syncTime须使用同一个值</font>
+-  <span style="color:red">**⚠️ WARNING:** elinkHealthRingCmdUtils.syncUnixTime(syncTime)elinkHealthRingCmdUtils.syncBleTime(syncTime)的入参syncTime须使用同一个值</span>
 
 #### 体检和自动监测指令
 ```dart
@@ -256,7 +256,7 @@ Elink健康戒指Flutter库.
   final data = _jfotaUtils.endOTA();
   _sendA7Data(data);
 ```
-- <font color="#FF0000">传感器OTA过程中请勿终端操作，可能会造成设备无法使用</font>
+- <span style="color:red">**⚠️ WARNING:** 传感器OTA过程中请勿中断操作，可能会造成设备无法使用</span>
 
 ### 健康戒指上报指令
 #### 通用指令回调
