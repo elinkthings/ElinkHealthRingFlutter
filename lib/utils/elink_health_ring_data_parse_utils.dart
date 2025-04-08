@@ -9,7 +9,7 @@ import 'package:elink_health_ring/model/elink_health_ring_status.dart';
 import 'package:elink_health_ring/model/elink_sleep_and_step_data.dart';
 import 'package:elink_health_ring/utils/elink_health_ring_base_utils.dart';
 import 'package:elink_health_ring/utils/elink_health_ring_checkup_callback.dart';
-import 'package:elink_health_ring/utils/elink_health_ring_commom_callback.dart';
+import 'package:elink_health_ring/utils/elink_health_ring_common_callback.dart';
 import 'package:elink_health_ring/utils/elink_health_ring_config.dart';
 import 'package:elink_health_ring/utils/elink_health_ring_sleep_step_callback.dart';
 import 'package:elink_health_ring/utils/extensions.dart';
@@ -31,18 +31,21 @@ class ElinkHealthRingDataParseUtils extends ElinkHealthRingBaseUtils {
     return _instance!;
   }
 
-  ElinkHealthRingCommomCallback? _commomCallback;
+  ElinkHealthRingCommonCallback? _commonCallback;
   ElinkHealthRingCheckupCallback? _checkupCallback;
   ElinkHealthRingSleepStepCallback? _sleepStepCallback;
+  JFOTAUtils? _jfotaUtils;
 
   void setCallback({
-    ElinkHealthRingCommomCallback? commonCallback,
+    ElinkHealthRingCommonCallback? commonCallback,
     ElinkHealthRingCheckupCallback? checkupCallback,
     ElinkHealthRingSleepStepCallback? sleepStepCallback,
+    JFOTAUtils? jfotaUtils,
   }) {
-    _commomCallback = commonCallback;
+    _commonCallback = commonCallback;
     _checkupCallback = checkupCallback;
     _sleepStepCallback = sleepStepCallback;
+    _jfotaUtils = jfotaUtils;
   }
 
   Future<void> parseElinkData(List<int> data) async {
@@ -102,7 +105,7 @@ class ElinkHealthRingDataParseUtils extends ElinkHealthRingBaseUtils {
         break;
       case 0x07:
         if (getMac() == null) return;
-        JFOTAUtils(getMac()!, cid: getCid()).parseReceiveData(payload);
+        _jfotaUtils?.parseReceiveData(payload);
         break;
       case 0x08:  //惊帆传感器信息
         _parseJFSensorInfo(payload.sublist(1));
@@ -188,7 +191,7 @@ class ElinkHealthRingDataParseUtils extends ElinkHealthRingBaseUtils {
         0x02 => ElinkWearingStatus.wearing,
         _ => ElinkWearingStatus.notWearing,
       };
-      _commomCallback?.onDeviceStatusChanged?.call(ElinkHealthRingStatus(historyState, batteryLevel, isCharging, wearingStatus));
+      _commonCallback?.onDeviceStatusChanged?.call(ElinkHealthRingStatus(historyState, batteryLevel, isCharging, wearingStatus));
     }
   }
 
@@ -204,14 +207,14 @@ class ElinkHealthRingDataParseUtils extends ElinkHealthRingBaseUtils {
   void _parseSetUnixTimeResult(Uint8List payload) {
     if (payload.length == 1) {
       final result = payload[0] == 0;
-      _commomCallback?.onSetUnixTimeResult?.call(result);
+      _commonCallback?.onSetUnixTimeResult?.call(result);
     }
   }
 
   void _parseSetBleTimeResult(Uint8List payload) {
     if (payload.length == 1) {
       final result = payload[0] == 0;
-      _commomCallback?.onSyncBleTimeResult?.call(result);
+      _commonCallback?.onSyncBleTimeResult?.call(result);
     }
   }
 
@@ -299,7 +302,7 @@ class ElinkHealthRingDataParseUtils extends ElinkHealthRingBaseUtils {
     if (payload.length >= 5 && payload[0] == 0x6A && payload[1] == 0x66 && payload[2] == 0x68) {
       final jfVersion = "${payload[3].toIntStr()}${payload[4].toIntStr()}";
       logD('_parseJFSensorInfo: $jfVersion');
-      _commomCallback?.onGetSensorVersion?.call(jfVersion);
+      _commonCallback?.onGetSensorVersion?.call(jfVersion);
     }
   }
 

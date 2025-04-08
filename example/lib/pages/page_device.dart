@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:ffi';
-import 'dart:typed_data';
 
 import 'package:ailink/ailink.dart';
 import 'package:ailink/impl/elink_common_data_parse_callback.dart';
@@ -11,15 +9,21 @@ import 'package:ailink/utils/elink_common_cmd_utils.dart';
 import 'package:ailink/utils/elink_common_data_parse_utils.dart';
 import 'package:elink_health_ring/utils/elink_health_ring_checkup_callback.dart';
 import 'package:elink_health_ring/utils/elink_health_ring_cmd_utils.dart';
-import 'package:elink_health_ring/utils/elink_health_ring_commom_callback.dart';
+import 'package:elink_health_ring/utils/elink_health_ring_common_callback.dart';
 import 'package:elink_health_ring/utils/elink_health_ring_data_parse_utils.dart';
+import 'package:elink_health_ring/utils/elink_health_ring_config.dart';
 import 'package:elink_health_ring/utils/elink_health_ring_sleep_step_callback.dart';
+import 'package:elink_health_ring/utils/jf_ota_utils.dart';
+import 'package:elink_health_ring/utils/log_utils.dart';
 import 'package:elink_health_ring_example/model/connect_device_model.dart';
 import 'package:elink_health_ring_example/model/log_info.dart';
+import 'package:elink_health_ring_example/utils/constants.dart';
 import 'package:elink_health_ring_example/utils/extensions.dart';
+import 'package:elink_health_ring_example/widgets/dialog_utils.dart';
 import 'package:elink_health_ring_example/widgets/widget_ble_state.dart';
 import 'package:elink_health_ring_example/widgets/widget_operate_btn.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 class PageDevice extends StatefulWidget {
@@ -31,8 +35,6 @@ class PageDevice extends StatefulWidget {
 
 class _PageDeviceState extends State<PageDevice> {
   final logList = <LogInfo>[];
-  int _checkupDuration = 30;
-  int _sleepAndStepCheckDuration = 5;
   bool _isReplyHandShake = false;
   bool _isCheckHandShake = false;
 
@@ -49,6 +51,7 @@ class _PageDeviceState extends State<PageDevice> {
   late ElinkCommonDataParseUtils _elinkCommonDataParseUtils;
   late ElinkHealthRingCmdUtils _elinkHealthRingCmdUtils;
   late ElinkHealthRingDataParseUtils _elinkHealthRingDataParseUtils;
+  late JFOTAUtils _jfotaUtils;
 
   DateTime? syncTime;
 
@@ -92,10 +95,38 @@ class _PageDeviceState extends State<PageDevice> {
     final connectDeviceModel = ModalRoute.of(context)?.settings.arguments as ConnectDeviceModel;
     final bleData = connectDeviceModel.bleData;
     _bluetoothDevice = connectDeviceModel.device;
+    _jfotaUtils = JFOTAUtils(bleData.macArr, cid: bleData.cidArr);
+    _jfotaUtils.setListener(
+      onStartSuccess: (size) async {
+        final data = await _jfotaUtils.eraseAll(size);
+        _sendA7Data(data);
+      },
+      onOtaPageWrite: (data, address) async {
+        final result = await _jfotaUtils.pageWrite(data, address);
+        _sendA7Data(result);
+      },
+      onOtaPageReadChecksum: (sum, address) async {
+        final data = await _jfotaUtils.pageReadChecksum(sum, address);
+        _sendA7Data(data);
+      },
+      onFailure: (type) async {
+        _addLog('onSensorOtaFailure: $type');
+        final data = await _jfotaUtils.endOTA();
+        _sendA7Data(data);
+      },
+      onSuccess: () async {
+        _addLog('onSensorOtaSuccess');
+        final data = await _jfotaUtils.endOTA();
+        _sendA7Data(data);
+      },
+      onProgressChanged: (progress) {
+        _addLog('onSensorOtaProgressChanged: $progress');
+      },
+    );
     _elinkHealthRingCmdUtils = ElinkHealthRingCmdUtils(bleData.macArr, cid: bleData.cidArr);
     _elinkHealthRingDataParseUtils = ElinkHealthRingDataParseUtils(bleData.macArr, cid: bleData.cidArr);
     _elinkHealthRingDataParseUtils.setCallback(
-      commonCallback: ElinkHealthRingCommomCallback(
+      commonCallback: ElinkHealthRingCommonCallback(
         onDeviceStatusChanged: (status) {
           _addLog('DeviceStatus: $status');
         },
@@ -155,6 +186,7 @@ class _PageDeviceState extends State<PageDevice> {
           _addLog('onGetStepCheckState: $open');
         },
       ),
+      jfotaUtils: _jfotaUtils,
     );
   }
 
@@ -234,7 +266,7 @@ class _PageDeviceState extends State<PageDevice> {
                       final data = _elinkHealthRingCmdUtils.syncUnixTime(syncTime!);
                       await _sendA6Data(data);
                     },
-                    title: 'SyncUnitTime',
+                    title: 'SyncUnixTime',
                   ),
                   OperateBtnWidget(
                     onPressed: () async {
@@ -267,30 +299,44 @@ class _PageDeviceState extends State<PageDevice> {
                   ),
                   OperateBtnWidget(
                     onPressed: () async {
+                      final data = await _elinkHealthRingCmdUtils.getCheckupType();
+                      await _sendA7Data(data);
+                    },
+                    title: 'CheckupType',
+                  ),
+                  OperateBtnWidget(
+                    onPressed: () => showListDialog(
+                      context: context,
+                      dataList: ['Fast', 'Complex'],
+                      title: 'SetCheckupType',
+                      onSelected: (type, index) async {
+                        final checkupType = index == 0 ? ElinkCheckupType.fast : ElinkCheckupType.complex;
+                        final data = await _elinkHealthRingCmdUtils.setCheckupType(checkupType);
+                        await _sendA7Data(data);
+                      },
+                    ),
+                    title: 'SetCheckupType',
+                  ),
+                  OperateBtnWidget(
+                    onPressed: () async {
                       final data = await _elinkHealthRingCmdUtils.getCheckupDuration();
                       await _sendA7Data(data);
                     },
                     title: 'CheckupDuration',
                   ),
-                  DropdownButton<int>(
-                    value: _checkupDuration,
-                    items: [15, 30, 45, 60].map((e) {
-                      return DropdownMenuItem<int>(
-                        value: e,
-                        child: Text(
-                          '${e}mins',
-                          style: const TextStyle(fontSize: 16),
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (duration) {
-                      setState(() {
-                        _checkupDuration = duration!;
-                      });
-                      _elinkHealthRingCmdUtils.setCheckupDuration(duration!).then((value) {
-                        _sendA7Data(value);
-                      });
-                    },
+                  OperateBtnWidget(
+                    onPressed: () => showListDialog(
+                      context: context,
+                      dataList: [15, 30, 45, 60],
+                      title: 'SetCheckupDuration',
+                      unit: 'mins',
+                      onSelected: (duration, index) {
+                        _elinkHealthRingCmdUtils.setCheckupDuration(duration).then((value) {
+                          _sendA7Data(value);
+                        });
+                      },
+                    ),
+                    title: 'SetCheckupDuration',
                   ),
                   OperateBtnWidget(
                     onPressed: () async {
@@ -341,25 +387,19 @@ class _PageDeviceState extends State<PageDevice> {
                     },
                     title: 'SleepAndStepDuration',
                   ),
-                  DropdownButton<int>(
-                    value: _sleepAndStepCheckDuration,
-                    items: [5, 10, 15, 20].map((e) {
-                      return DropdownMenuItem<int>(
-                        value: e,
-                        child: Text(
-                          '${e}mins',
-                          style: const TextStyle(fontSize: 16),
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (duration) {
-                      setState(() {
-                        _sleepAndStepCheckDuration = duration!;
-                      });
-                      _elinkHealthRingCmdUtils.setSleepAndStepDuration(duration!).then((value) {
-                        _sendA7Data(value);
-                      });
-                    },
+                  OperateBtnWidget(
+                    onPressed: () => showListDialog(
+                      context: context,
+                      dataList: [5, 10, 15, 20],
+                      title: 'SetSleepStepDuration',
+                      unit: 'mins',
+                      onSelected: (duration, index) {
+                        _elinkHealthRingCmdUtils.setSleepAndStepDuration(duration).then((value) {
+                          _sendA7Data(value);
+                        });
+                      },
+                    ),
+                    title: 'SetSleepDuration',
                   ),
                   OperateBtnWidget(
                     onPressed: () async {
@@ -430,6 +470,22 @@ class _PageDeviceState extends State<PageDevice> {
                       await _sendA7Data(data);
                     },
                     title: 'DeleteSleepHistory',
+                  ),
+                  OperateBtnWidget(
+                    onPressed: () => showListDialog(
+                      context: context,
+                      dataList: [sensroOtaFile1, sensroOtaFile2],
+                      title: 'ChooseSensorOtaFile',
+                      onSelected: (fileName, index) {
+                        loadFile('assets/sensor/$fileName').then((value) async {
+                          logD('OTA文件长度: ${value.length}');
+                          _jfotaUtils.setFileData(value);
+                          final startOta = await _jfotaUtils.startOTA();
+                          _sendA7Data(startOta);
+                        });
+                      },
+                    ),
+                    title: 'SensorOTA',
                   ),
                 ],
               ),
@@ -542,6 +598,11 @@ class _PageDeviceState extends State<PageDevice> {
         logList.insert(0, LogInfo(DateTime.now(), log));
       });
     }
+  }
+
+  Future<Uint8List> loadFile(String path) async {
+    final byteData = await rootBundle.load(path);
+    return byteData.buffer.asUint8List();
   }
 
   @override

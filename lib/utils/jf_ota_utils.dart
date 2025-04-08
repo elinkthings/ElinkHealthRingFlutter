@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:ailink/utils/common_extensions.dart';
 import 'package:elink_health_ring/utils/elink_health_ring_base_utils.dart';
@@ -10,6 +11,8 @@ enum JFOTAErrorType {
   checkFail, //校验失败
   writeError, //写入错误
   eraseError, //擦除错误
+  dataError, //数据错误,
+  endOtaFail, //退出OTA失败
 }
 
 /// 戒指芯片(惊帆)OTA
@@ -22,12 +25,14 @@ class JFOTAUtils extends ElinkHealthRingBaseUtils {
   static const _cmdAckPagesCsFailA6 = 0xA6;
 
   int _address = 0;
-  int _startOtaCount = 0;
 
   Uint8List? _fileData;
 
+  Function(int)? _onStartSuccess;
+  Function(List<int>, int)? _onOtaPageWrite;
+  Function(int, int)? _onOtaPageReadChecksum;
   Function(JFOTAErrorType type)? _onFailure;
-  Function()? _onSuccess;
+  VoidCallback? _onSuccess;
   Function(int progress)? _onProgressChanged;
 
   static JFOTAUtils? _instance;
@@ -64,24 +69,29 @@ class JFOTAUtils extends ElinkHealthRingBaseUtils {
   }
 
   void setListener({
+    Function(int)? onStartSuccess,
+    Function(List<int>, int)? onOtaPageWrite,
+    Function(int, int)? onOtaPageReadChecksum,
     Function(JFOTAErrorType type)? onFailure,
-    Function()? onSuccess,
+    VoidCallback? onSuccess,
     Function(int progress)? onProgressChanged,
   }) {
+    _onStartSuccess = onStartSuccess;
+    _onOtaPageWrite = onOtaPageWrite;
+    _onOtaPageReadChecksum = onOtaPageReadChecksum;
     _onFailure = onFailure;
     _onSuccess = onSuccess;
     _onProgressChanged = onProgressChanged;
   }
 
-  void startOTA() {
-    getElinkA7Data([0x07, 0x01]);
+  Future<List<int>> startOTA() {
+    _address = 0;
+    return getElinkA7Data([0x07, 0x01]);
   }
 
-  void endOTA() {
-    getElinkA7Data([0x07, 0x02]);
-  }
+  Future<List<int>> endOTA() => getElinkA7Data([0x07, 0x02]);
 
-  void eraseAll(int size) {
+  Future<List<int>> eraseAll(int size) {
     final payload = List<int>.empty(growable: true);
     payload.addAll([
       0x07,
@@ -97,11 +107,14 @@ class JFOTAUtils extends ElinkHealthRingBaseUtils {
     ]);
     final crc = checksum(payload.sublist(4, payload.length));
     payload.add(crc);
-    getElinkA7Data(payload);
+    return getElinkA7Data(payload);
   }
 
-  void _pageWrite(List<int> data, int address) {
-    if (data.length != 128) return;
+  Future<List<int>> pageWrite(List<int> data, int address) {
+    if (data.length != 128) {
+      _otaFailure(JFOTAErrorType.dataError);
+      return Future.value([]);
+    }
     final payload = List<int>.empty(growable: true);
     payload.addAll([
       0x07,
@@ -116,10 +129,10 @@ class JFOTAUtils extends ElinkHealthRingBaseUtils {
     ]);
     final crc = checksum(payload.sublist(4, payload.length));
     payload.add(crc);
-    getElinkA7Data(payload);
+    return getElinkA7Data(payload);
   }
 
-  void _pageReadChecksum(int pageChecksum, int address) {
+  Future<List<int>> pageReadChecksum(int pageChecksum, int address) {
     final payload = List<int>.empty(growable: true);
     payload.addAll([
       0x07,
@@ -135,7 +148,7 @@ class JFOTAUtils extends ElinkHealthRingBaseUtils {
     ]);
     final crc = checksum(payload.sublist(4, payload.length));
     payload.add(crc);
-    getElinkA7Data(payload);
+    return getElinkA7Data(payload);
   }
 
   void otaWritePage() {
@@ -148,7 +161,7 @@ class JFOTAUtils extends ElinkHealthRingBaseUtils {
     final packet = _fileData!.sublist(_address, endAddress);
     payload.setAll(0, packet);
     logD("otaWritePage: 发送: ${payload.length}, ${payload.toHex()} [写地址:0x${_address.toRadixString(16)}]");
-    _pageWrite(payload, _address);
+    _onOtaPageWrite?.call(payload, _address);
   }
 
   void otaPageReadChecksum() {
@@ -162,7 +175,7 @@ class JFOTAUtils extends ElinkHealthRingBaseUtils {
     payload.setAll(0, packet);
     int sum = checksum(payload);
     logD("otaPageReadChecksum 发送: ${payload.length}, ${payload.toHex()} [校验地址:0x${_address.toRadixString(16)} Checksum:0x${sum.toRadixString(16)}]");
-    _pageReadChecksum(sum, _address);
+    _onOtaPageReadChecksum?.call(sum, _address);
   }
 
   void parseReceiveData(Uint8List payload) {
@@ -174,25 +187,21 @@ class JFOTAUtils extends ElinkHealthRingBaseUtils {
       case 0x01:
         if (payload[2] == 0x00) {
           logD('parseReceiveData 进入OTA成功');
-          _startOtaCount = 0;
-          if (_fileData == null) return;
-          eraseAll(_fileData!.length);
+          if (_fileData == null) {
+            _otaFailure(JFOTAErrorType.dataError);
+            return;
+          }
+          _onStartSuccess?.call(_fileData!.length);
         } else {
           logD('parseReceiveData 进入OTA失败');
-          if (_startOtaCount < 3) {
-            startOTA();
-          } else {
-            _startOtaCount = 0;
-            _otaFailure(JFOTAErrorType.startOtaFail);
-          }
+          _otaFailure(JFOTAErrorType.startOtaFail);
         }
         break;
       case 0x02:
         if (payload[2] == 0x00) {
-          _startOtaCount = 0;
           logD('parseReceiveData 退出OTA成功');
         } else {
-          endOTA();
+          _otaFailure(JFOTAErrorType.endOtaFail);
           logD('parseReceiveData 退出OTA失败');
         }
         break;
@@ -229,7 +238,6 @@ class JFOTAUtils extends ElinkHealthRingBaseUtils {
       case _cmdCodePagesReadChecksum81:
         if (payload[6] == _cmdAckPagesCsFailA6 && payload[5] == 0x01) {
           logD('parseReceiveOtaResult 校验失败');
-          endOTA();
           _onFailure?.call(JFOTAErrorType.checkFail);
         } else if (payload[6] == _cmdAckPagesCsTrueA5 && payload[5] == 0x01) {
           logD('parseReceiveOtaResult 校验成功: $_address, $_totalSize');
@@ -240,7 +248,6 @@ class JFOTAUtils extends ElinkHealthRingBaseUtils {
           } else {
             logD('parseReceiveOtaResult 升级成功');
             _address = 0;
-            endOTA();
             _onSuccess?.call();
           }
         } else {
@@ -254,7 +261,6 @@ class JFOTAUtils extends ElinkHealthRingBaseUtils {
   }
 
   _otaFailure(JFOTAErrorType type) {
-    endOTA();
     _onFailure?.call(type);
   }
 
