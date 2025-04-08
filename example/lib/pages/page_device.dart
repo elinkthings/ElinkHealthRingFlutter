@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:ffi';
 import 'dart:typed_data';
 
+import 'package:ailink/ailink.dart';
 import 'package:ailink/impl/elink_common_data_parse_callback.dart';
 import 'package:ailink/utils/ble_common_util.dart';
 import 'package:ailink/utils/common_extensions.dart';
@@ -31,6 +33,8 @@ class _PageDeviceState extends State<PageDevice> {
   final logList = <LogInfo>[];
   int _checkupDuration = 30;
   int _sleepAndStepCheckDuration = 5;
+  bool _isReplyHandShake = false;
+  bool _isCheckHandShake = false;
 
   final ScrollController _controller = ScrollController();
 
@@ -70,6 +74,8 @@ class _PageDeviceState extends State<PageDevice> {
             } else {
               _dataA6Characteristic = null;
               _dataA7Characteristic = null;
+              _isReplyHandShake = false;
+              _isCheckHandShake = false;
               _addLog('Disconnected: code(${_bluetoothDevice?.disconnectReason?.code}), desc(${_bluetoothDevice?.disconnectReason?.description})');
             }
           });
@@ -120,7 +126,7 @@ class _PageDeviceState extends State<PageDevice> {
           _addLog('onGetCheckupDuration: ${duration}mins');
         },
         onGetCheckupHistory: (list, total, sentCount) {
-          _addLog('onGetCheckupHistory: total: $total, count: $sentCount, list: ${list.join(',')}');
+          _addLog('onGetCheckupHistory: total: $total, sentCount: $sentCount, list: ${list.join(',')}');
         },
         onGetAutoCheckupStatus: (open) {
           _addLog('onGetAutoCheckupStatus: $open');
@@ -137,7 +143,7 @@ class _PageDeviceState extends State<PageDevice> {
           _addLog('onGetSleepAndStepCheckDuration: ${duration}mins');
         },
         onGetSleepAndStepHistory: (list, total, sentCount) {
-          _addLog('onGetSleepAndStepHistory: total: $total, count: $sentCount, list: ${list.join(',')}');
+          _addLog('onGetSleepAndStepHistory: total: $total, sentCount: $sentCount, list: ${list.join(',')}');
         },
         onNotifySleepAndStepHistoryGenerated: () {
           _addLog('onNotifySleepAndStepHistoryGenerated');
@@ -157,6 +163,7 @@ class _PageDeviceState extends State<PageDevice> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.blue,
+        centerTitle: false,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -204,11 +211,7 @@ class _PageDeviceState extends State<PageDevice> {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   OperateBtnWidget(
-                    onPressed: () async {
-                      if (_dataA6Characteristic != null) {
-                        _getBmVersion(_dataA6Characteristic!);
-                      }
-                    },
+                    onPressed: () => _getBmVersion(),
                     title: 'BmVersion',
                   ),
                   OperateBtnWidget(
@@ -473,10 +476,22 @@ class _PageDeviceState extends State<PageDevice> {
         if (characteristic.uuid.str.equal(ElinkBleCommonUtils.elinkWriteAndNotifyUuid)) {
           _onReceiveDataSubscription = characteristic.onValueReceived.listen((data) async {
             _addLog('OnValueReceived [${characteristic.uuid.str}]: ${data.toHex()}, checked: ${ElinkCmdUtils.checkElinkCmdSum(data)}');
-            _elinkCommonDataParseUtils.parseElinkCommonData(data);
-            await _elinkHealthRingDataParseUtils.parseElinkData(Uint8List.fromList(data));
+            if (ElinkBleCommonUtils.isSetHandShakeCmd(data)) {
+              _replyHandShake(data);
+            } else if (ElinkBleCommonUtils.isGetHandShakeCmd(data)) {
+              Future.delayed(const Duration(milliseconds: 500), () async {
+                if (_isCheckHandShake) return;
+                final handShakeStatus = await Ailink().checkHandShakeStatus(Uint8List.fromList(data));
+                _addLog('handShakeStatus: $handShakeStatus');
+                _isCheckHandShake = true;
+              });
+            } else {
+              _elinkCommonDataParseUtils.parseElinkCommonData(data);
+              await _elinkHealthRingDataParseUtils.parseElinkData(Uint8List.fromList(data));
+            }
           });
           _dataA6Characteristic = characteristic;
+          await _setHandShake();
         } else if (characteristic.uuid.str.equal(ElinkBleCommonUtils.elinkNotifyUuid)) {
           _onReceiveDataSubscription1 = characteristic.onValueReceived.listen((data) async {
             _addLog('OnValueReceived [${characteristic.uuid.str}]: ${data.toHex()}, checked: ${ElinkCmdUtils.checkElinkCmdSum(data)}');
@@ -493,7 +508,21 @@ class _PageDeviceState extends State<PageDevice> {
     }
   }
 
-  Future<void> _getBmVersion(BluetoothCharacteristic characteristic) async {
+  Future<void> _setHandShake() async {
+    Uint8List data = (await Ailink().initHandShake()) ?? Uint8List(0);
+    _addLog('_setHandShake: ${data.toHex()}');
+    await _sendA6Data(data);
+  }
+
+  Future<void> _replyHandShake(List<int> data) async {
+    if (_isReplyHandShake) return;
+    Uint8List replyData = (await Ailink().getHandShakeEncryptData(Uint8List.fromList(data))) ?? Uint8List(0);
+    _addLog('_replyHandShake: ${replyData.toHex()}');
+    await _sendA6Data(data);
+    _isReplyHandShake = true;
+  }
+
+  Future<void> _getBmVersion() async {
     final data = ElinkCommonCmdUtils.getElinkBmVersion();
     _addLog('_getBmVersion: ${data.toHex()}');
     await _sendA6Data(data);
@@ -521,6 +550,8 @@ class _PageDeviceState extends State<PageDevice> {
     _bluetoothDevice = null;
     _dataA6Characteristic = null;
     _dataA6Characteristic = null;
+    _isReplyHandShake = false;
+    _isCheckHandShake = false;
     _controller.dispose();
     _onReceiveDataSubscription?.cancel();
     _onReceiveDataSubscription1?.cancel();

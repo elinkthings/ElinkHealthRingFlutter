@@ -1,0 +1,41 @@
+PODS:
+  - ailink (0.0.1):
+    - Flutter
+  - elink_health_ring (0.0.1):
+    - Flutter
+  - Flutter (1.0.0)
+  - flutter_blue_plus_darwin (0.0.2):
+    - Flutter
+    - FlutterMacOS
+  - integration_test (0.0.1):
+    - Flutter
+
+DEPENDENCIES:
+  - ailink (from `.symlinks/plugins/ailink/ios`)
+  - elink_health_ring (from `.symlinks/plugins/elink_health_ring/ios`)
+  - Flutter (from `Flutter`)
+  - flutter_blue_plus_darwin (from `.symlinks/plugins/flutter_blue_plus_darwin/darwin`)
+  - integration_test (from `.symlinks/plugins/integration_test/ios`)
+
+EXTERNAL SOURCES:
+  ailink:
+    :path: ".symlinks/plugins/ailink/ios"
+  elink_health_ring:
+    :path: ".symlinks/plugins/elink_health_ring/ios"
+  Flutter:
+    :path: Flutter
+  flutter_blue_plus_darwin:
+    :path: ".symlinks/plugins/flutter_blue_plus_darwin/darwin"
+  integration_test:
+    :path: ".symlinks/plugins/integration_test/ios"
+
+SPEC CHECKSUMS:
+  ailink: 7bfe39d4313e58dec8f460b90aedcbffccb6a721
+  elink_health_ring: d25e8efcbc595d88bb42639df8c61ffcbea7f9d9
+  Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
+  flutter_blue_plus_darwin: 09444a26fb6bdef523e55b68fc1c59af5a877ea6
+  integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
+
+PODFILE CHECKSUM: 4305caec6b40dde0ae97be1573c53de1882a07e5
+
+COCOAPODS: 1.16.2

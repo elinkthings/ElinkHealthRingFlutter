@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:ailink/utils/common_extensions.dart';
-import 'package:ailink/utils/elink_cmd_utils.dart';
+import 'package:elink_health_ring/utils/elink_health_ring_base_utils.dart';
 import 'package:elink_health_ring/utils/elink_health_ring_config.dart';
 import 'package:elink_health_ring/utils/log_utils.dart';
 
@@ -13,7 +13,7 @@ enum JFOTAErrorType {
 }
 
 /// 戒指芯片(惊帆)OTA
-class JFOTAUtils {
+class JFOTAUtils extends ElinkHealthRingBaseUtils {
   static const _cmdCodePageWriteOnly97 = 0x97;
   static const _cmdCodeAllErase98 = 0x98;
   static const _cmdCodePagesReadChecksum81 = 0x81;
@@ -31,16 +31,15 @@ class JFOTAUtils {
   Function(int progress)? _onProgressChanged;
 
   static JFOTAUtils? _instance;
-  List<int> _mac;
-  List<int> _cid;
 
-  JFOTAUtils._(this._mac, this._cid);
+  JFOTAUtils._();
 
   factory JFOTAUtils(
     List<int> mac, {
     List<int> cid = ElinkHealthRingConfig.cidHealthRing,
   }) {
-    _instance ??= JFOTAUtils._(mac, cid);
+    _instance ??= JFOTAUtils._();
+    _instance?.initialize(mac, cid: cid);
     return _instance!;
   }
 
@@ -74,16 +73,12 @@ class JFOTAUtils {
     _onProgressChanged = onProgressChanged;
   }
 
-  Future<List<int>> _getElinkA7Data(List<int> data) {
-    return ElinkCmdUtils.getElinkA7Data(_cid, _mac!, data);
-  }
-
   void startOTA() {
-    _getElinkA7Data([0x07, 0x01]);
+    getElinkA7Data([0x07, 0x01]);
   }
 
   void endOTA() {
-    _getElinkA7Data([0x07, 0x02]);
+    getElinkA7Data([0x07, 0x02]);
   }
 
   void eraseAll(int size) {
@@ -102,7 +97,7 @@ class JFOTAUtils {
     ]);
     final crc = checksum(payload.sublist(4, payload.length));
     payload.add(crc);
-    _getElinkA7Data(payload);
+    getElinkA7Data(payload);
   }
 
   void _pageWrite(List<int> data, int address) {
@@ -121,7 +116,7 @@ class JFOTAUtils {
     ]);
     final crc = checksum(payload.sublist(4, payload.length));
     payload.add(crc);
-    _getElinkA7Data(payload);
+    getElinkA7Data(payload);
   }
 
   void _pageReadChecksum(int pageChecksum, int address) {
@@ -140,7 +135,7 @@ class JFOTAUtils {
     ]);
     final crc = checksum(payload.sublist(4, payload.length));
     payload.add(crc);
-    _getElinkA7Data(payload);
+    getElinkA7Data(payload);
   }
 
   void otaWritePage() {

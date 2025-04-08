@@ -7,6 +7,7 @@ import 'package:elink_health_ring/model/elink_checkup_history_data.dart';
 import 'package:elink_health_ring/model/elink_chekup_realtime_data.dart';
 import 'package:elink_health_ring/model/elink_health_ring_status.dart';
 import 'package:elink_health_ring/model/elink_sleep_and_step_data.dart';
+import 'package:elink_health_ring/utils/elink_health_ring_base_utils.dart';
 import 'package:elink_health_ring/utils/elink_health_ring_checkup_callback.dart';
 import 'package:elink_health_ring/utils/elink_health_ring_commom_callback.dart';
 import 'package:elink_health_ring/utils/elink_health_ring_config.dart';
@@ -16,18 +17,17 @@ import 'package:elink_health_ring/utils/jf_ota_utils.dart';
 
 import 'log_utils.dart';
 
-class ElinkHealthRingDataParseUtils {
+class ElinkHealthRingDataParseUtils extends ElinkHealthRingBaseUtils {
   static ElinkHealthRingDataParseUtils? _instance;
-  List<int> _mac;
-  List<int> _cid;
 
-  ElinkHealthRingDataParseUtils._(this._mac, this._cid);
+  ElinkHealthRingDataParseUtils._();
 
   factory ElinkHealthRingDataParseUtils(
     List<int> mac, {
     List<int> cid = ElinkHealthRingConfig.cidHealthRing,
   }) {
-    _instance ??= ElinkHealthRingDataParseUtils._(mac, cid);
+    _instance ??= ElinkHealthRingDataParseUtils._();
+    _instance?.initialize(mac, cid: cid);
     return _instance!;
   }
 
@@ -58,7 +58,8 @@ class ElinkHealthRingDataParseUtils {
         final cid = data.sublist(1, 3);
         logD('parseElinkData isElinkA7Data: ${cid.toHex()}');
         if (ElinkHealthRingConfig.isCidHealthRing(cid)) {
-          final decrypted = await Ailink().mcuDecrypt(Uint8List.fromList(_mac), Uint8List.fromList(data));
+          if (getMac() == null) return;
+          final decrypted = await Ailink().mcuDecrypt(Uint8List.fromList(getMac()!), Uint8List.fromList(data));
           logD('parseElinkData isElinkA7Data isCidHealthRing: ${cid.toHex()}');
           _parseData(decrypted);
         }
@@ -100,7 +101,8 @@ class ElinkHealthRingDataParseUtils {
         _parseDeviceStatus(payload.sublist(1));
         break;
       case 0x07:
-        JFOTAUtils(_mac, cid: _cid).parseReceiveData(payload);
+        if (getMac() == null) return;
+        JFOTAUtils(getMac()!, cid: getCid()).parseReceiveData(payload);
         break;
       case 0x08:  //惊帆传感器信息
         _parseJFSensorInfo(payload.sublist(1));
