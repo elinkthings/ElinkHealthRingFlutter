@@ -1,6 +1,6 @@
 # elink_health_ring
 
-A new Flutter project.
+Flutter project for Elink Health Ring SDK..
 
 ## Getting Started
 

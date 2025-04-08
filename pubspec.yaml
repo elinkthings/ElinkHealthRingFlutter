@@ -1,7 +1,7 @@
 name: elink_health_ring
-description: "A new Flutter project."
-version: 0.0.1
-homepage:
+description: "Flutter project for Elink Health Ring SDK."
+version: 1.0.0
+homepage: https://github.com/elinkthings/ElinkHealthRingFlutter
 
 environment:
   sdk: ^3.7.2
@@ -11,6 +11,8 @@ dependencies:
   flutter:
     sdk: flutter
   plugin_platform_interface: ^2.0.2
+  ailink:
+    path: ../ailink
 
 dev_dependencies:
   flutter_test:
