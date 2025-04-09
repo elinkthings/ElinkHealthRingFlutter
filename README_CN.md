@@ -258,6 +258,33 @@ Elink健康戒指Flutter库.
 ```
 - <span style="color:red">**⚠️ WARNING:** 传感器OTA过程中请勿中断操作，可能会造成设备无法使用</span>
 
+#### 蓝牙OTA
+```dart
+  import 'package:elink_health_ring/utils/ota/dialog_ota_listener.dart';
+  import 'package:elink_health_ring/utils/ota/dialog_ota_manager.dart';
+  
+  final DialogOtaManager _dialogOtaManager = DialogOtaManager();
+
+  //1. 设备连接成功并发现服务后，调用_dialogOtaManager.setServices(services);
+  _bluetoothDevice?.discoverServices().then((services) {
+    _dialogOtaManager.setServices(services);
+  }, onError: (error) {
+  });
+  
+  //2. 设置OTA文件数据和开始OTA
+  final Uint8List fileData; //文件数据
+  _dialogOtaManager.setDataAndStart(fileData, listener: this);
+
+  abstract class DialogOtaListener {
+    void onOtaSuccess();  //OTA升级完成
+    
+    void onOtaFailure(int code, String msg);  //OTA升级失败 code:错误码 msg:错误信息
+    
+    void onOtaProgress(double progress);  //OTA升级进度 0-100
+  }
+```
+- <span style="color:red">**⚠️ WARNING:** 蓝牙OTA成功后，设备会重启，如果没有收到该设备的广播，请使用充电器激活设备</span>
+
 ### 健康戒指上报指令
 #### 通用指令回调
 ```dart

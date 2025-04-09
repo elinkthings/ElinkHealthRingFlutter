@@ -1,6 +1,6 @@
 name: elink_health_ring
 description: "Flutter project for Elink Health Ring SDK."
-version: 1.0.0
+version: 1.1.0
 homepage: https://github.com/elinkthings/ElinkHealthRingFlutter
 
 environment:

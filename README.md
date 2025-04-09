@@ -257,6 +257,32 @@ Elink Health Ring Flutter library.
   _sendA7Data(data);
 ```
 - <span style="color:red">**⚠️ WARNING:** Do not interrupt the operation during the sensor OTA process, as it may cause the device to become unusable.</span>
+#### BLE OTA
+```dart
+  import 'package:elink_health_ring/utils/ota/dialog_ota_listener.dart';
+  import 'package:elink_health_ring/utils/ota/dialog_ota_manager.dart';
+  
+  final DialogOtaManager _dialogOtaManager = DialogOtaManager();
+
+  //1. After the device is successfully connected and the service is discovered, call _dialogOtaManager.setServices(services);
+  _bluetoothDevice?.discoverServices().then((services) {
+    _dialogOtaManager.setServices(services);
+  }, onError: (error) {
+  });
+  
+  //2. Set OTA file data and start OTA
+  final Uint8List fileData;
+  _dialogOtaManager.setDataAndStart(fileData, listener: this);
+
+  abstract class DialogOtaListener {
+    void onOtaSuccess();  //OTA upgrade completed
+    
+    void onOtaFailure(int code, String msg);  //OTA upgrade failed code: error code msg: error message
+    
+    void onOtaProgress(double progress);  //OTA upgrade progress 0-100
+  }
+```
+- <span style="color:red">**⚠️ WARNING:** After the Bluetooth OTA is successful, the device will restart. If you do not receive the device's broadcast, please use the charger to activate the device.</span>
 
 ### Health Ring Reporting Instructions
 #### General command callback
