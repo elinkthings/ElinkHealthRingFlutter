@@ -15,6 +15,8 @@ import 'package:elink_health_ring/utils/elink_health_ring_config.dart';
 import 'package:elink_health_ring/utils/elink_health_ring_sleep_step_callback.dart';
 import 'package:elink_health_ring/utils/jf_ota_utils.dart';
 import 'package:elink_health_ring/utils/log_utils.dart';
+import 'package:elink_health_ring/utils/ota/dialog_ota_listener.dart';
+import 'package:elink_health_ring/utils/ota/dialog_ota_manager.dart';
 import 'package:elink_health_ring_example/model/connect_device_model.dart';
 import 'package:elink_health_ring_example/model/log_info.dart';
 import 'package:elink_health_ring_example/utils/constants.dart';
@@ -33,7 +35,7 @@ class PageDevice extends StatefulWidget {
   State<PageDevice> createState() => _PageDeviceState();
 }
 
-class _PageDeviceState extends State<PageDevice> {
+class _PageDeviceState extends State<PageDevice> implements DialogOtaListener {
   final logList = <LogInfo>[];
   bool _isReplyHandShake = false;
   bool _isCheckHandShake = false;
@@ -52,6 +54,7 @@ class _PageDeviceState extends State<PageDevice> {
   late ElinkHealthRingCmdUtils _elinkHealthRingCmdUtils;
   late ElinkHealthRingDataParseUtils _elinkHealthRingDataParseUtils;
   late JFOTAUtils _jfotaUtils;
+  final DialogOtaManager _dialogOtaManager = DialogOtaManager();
 
   DateTime? syncTime;
 
@@ -68,6 +71,7 @@ class _PageDeviceState extends State<PageDevice> {
               _addLog('Connected');
               _bluetoothDevice?.discoverServices().then((services) {
                 _addLog('DiscoverServices success: ${services.map((e) => e.serviceUuid).join(',').toUpperCase()}');
+                _dialogOtaManager.setServices(services);
                 if (services.isNotEmpty) {
                   _setNotify(services);
                 }
@@ -79,6 +83,8 @@ class _PageDeviceState extends State<PageDevice> {
               _dataA7Characteristic = null;
               _isReplyHandShake = false;
               _isCheckHandShake = false;
+              _onReceiveDataSubscription?.cancel();
+              _onReceiveDataSubscription1?.cancel();
               _addLog('Disconnected: code(${_bluetoothDevice?.disconnectReason?.code}), desc(${_bluetoothDevice?.disconnectReason?.description})');
             }
           });
@@ -487,6 +493,20 @@ class _PageDeviceState extends State<PageDevice> {
                     ),
                     title: 'SensorOTA',
                   ),
+                  OperateBtnWidget(
+                    onPressed: () => showListDialog(
+                      context: context,
+                      dataList: [bleOtaFile1, bleOtaFile2],
+                      title: 'ChooseBleOtaFile',
+                      onSelected: (fileName, index) {
+                        loadFile('assets/ble/$fileName').then((value) async {
+                          logD('OTA文件长度: ${value.length}');
+                          _dialogOtaManager.setDataAndStart(fileData: value, listener: this);
+                        });
+                      },
+                    ),
+                    title: 'BleOTA',
+                  ),
                 ],
               ),
             ),
@@ -537,9 +557,9 @@ class _PageDeviceState extends State<PageDevice> {
             } else if (ElinkBleCommonUtils.isGetHandShakeCmd(data)) {
               Future.delayed(const Duration(milliseconds: 500), () async {
                 if (_isCheckHandShake) return;
+                _isCheckHandShake = true;
                 final handShakeStatus = await Ailink().checkHandShakeStatus(Uint8List.fromList(data));
                 _addLog('handShakeStatus: $handShakeStatus');
-                _isCheckHandShake = true;
               });
             } else {
               _elinkCommonDataParseUtils.parseElinkCommonData(data);
@@ -572,10 +592,10 @@ class _PageDeviceState extends State<PageDevice> {
 
   Future<void> _replyHandShake(List<int> data) async {
     if (_isReplyHandShake) return;
+    _isReplyHandShake = true;
     Uint8List replyData = (await Ailink().getHandShakeEncryptData(Uint8List.fromList(data))) ?? Uint8List(0);
     _addLog('_replyHandShake: ${replyData.toHex()}');
     await _sendA6Data(data);
-    _isReplyHandShake = true;
   }
 
   Future<void> _getBmVersion() async {
@@ -618,5 +638,26 @@ class _PageDeviceState extends State<PageDevice> {
     _onReceiveDataSubscription1?.cancel();
     _connectionStateSubscription?.cancel();
     super.dispose();
+  }
+
+  @override
+  void onOtaFailure(int code, String msg) {
+    _addLog('onBleOtaFailure: $code, $msg');
+  }
+
+  String _preProgress = '';
+
+  @override
+  void onOtaProgress(double progress) {
+    final progressStr = progress.toStringAsFixed(0);
+    if (progressStr != _preProgress) {
+      _preProgress = progressStr;
+      _addLog('onBleOtaProgress: $progressStr%');
+    }
+  }
+
+  @override
+  void onOtaSuccess() {
+    _addLog('onBleOtaSuccess');
   }
 }
